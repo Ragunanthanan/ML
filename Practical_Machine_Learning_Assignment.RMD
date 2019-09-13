@@ -1,0 +1,111 @@
+---
+title: "Practical_Machine_Learning_Assignment"
+author: "Ragunanthanan"
+date: "9/13/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r, echo=TRUE}
+## Importing Libraries
+
+library(ggplot2)
+library(dplyr)
+library(fastDummies)
+library(caret)
+library(randomForest)
+
+# Importing the dataset
+training<- read.csv("pml-training.csv", na.strings = c(""," ","NA"))
+testing<- read.csv("pml-testing.csv", na.strings = c(""," ","NA"))
+
+### Data preprocessing
+
+# Data has around 19000 observations with 160 features. When you look into the features, most of the features(~100) have missing values. Since the percentage of missing values are more than the non-missing values. I decided to ignore those.
+
+# Step 1: Handling missing Values for Training Data
+missing_data<- apply(training,2, function(x) !(any(is.na(x))))
+data<- data.frame(missing_data)
+training_data<- training[,data$missing_data]
+
+# Handling missing Values for Testing Data
+missing_data_test<- apply(testing,2, function(x) !(any(is.na(x))))
+data_test<- data.frame(missing_data_test)
+testing_data<- testing[,data_test$missing_data_test]
+
+# After Ignoring the missing values, there were few charactor features. Non-Numeric features, in this case are add no values to the prediction.Hence, removed them from the predictor list
+
+## Step2: Handling the non-numeric values
+train_data<- select(training_data, -c(X:new_window))
+test_data<- select(testing_data,-c(X:new_window))
+fit_rf<- randomForest(classe~., data= train_data)
+
+# Findout Feature Importance
+
+# Now, we have list of predictors which are around 56. We cannot throw all of them into the model. Hence, i try to fiqure out the importance of the features using the following methods: 
+#1. Importance from Random Forest
+#2. Correlations between the predictors
+
+importance<-importance(fit_rf,)
+varImpPlot(fit_rf)
+min<-min(importance)
+max<- max(importance)
+mean<- mean(importance)
+md<-median(importance)
+a<- importance>mean
+
+#Findout the correlations between the predictors
+
+train_d<- select(train_data, -c(classe))
+d<- abs(cor(train_d))
+diag(d)<-1
+t<-which(d>0.9, arr.ind = T)
+
+# Data with impacted parameters
+
+final_data<-train_data[,a]
+final_data_test<- test_data[,a]
+
+## Step3: Prediction
+
+# Spliting Train and Test sets 
+
+# After completing the pre-processing, i have split the data into test and train datasets using Caret package
+
+train_inx<- createDataPartition(final_data$classe, p=0.5, list=F)
+traindata<- final_data[train_inx,]
+testdata<- final_data[-train_inx,]
+
+# Fit into Model- Tree
+
+# Since, it's a classifcation problem, decides to go with decision tree, random forest algorithm
+
+mod1<- train(classe~., data= traindata, method='rpart')
+pred1<- predict(mod1, testdata)
+confusionMatrix(pred1, testdata$classe)
+
+# Decision tree algorithm yields 57% accuracy. it will not be enough to predict the correct values.
+
+# Fit into Model- Random Forest
+
+mod2<- train(classe~., data= traindata, method='rf', prox= T, ntree=250)
+pred2<- predict(mod2, testdata)
+confusionMatrix(pred2, testdata$classe)
+
+# Random forest yields, 99% Accuracy. So there may be higher chance of over-fiiting. I have used the cv in the traincontrol.
+#t<- trainControl(method='cv')
+#mod3<- train(classe~., data= traindata,trainControl=t ,method='rf', prox= T, ntree=250)
+#pred2<- predict(mod2, testdata)
+
+## Step4: Final data prediction
+p1<- predict(mod2, test_data)
+p1
+
+# Finally, selected the randomforest method to predict the test cases. All 20 test cases, were predicted correctly with the model.
+
+```
+
